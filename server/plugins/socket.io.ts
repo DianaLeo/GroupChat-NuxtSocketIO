@@ -41,8 +41,13 @@ export default defineNitroPlugin((nitroApp: NitroApp) => {
 
         //DISCONNECT
         socket.on("disconnect", () => {
-            console.info("[Server/Plugin]: Group chat web socket disconnected")
+            console.info("[Server/Plugin]: Group chat web socket disconnected",socket.id)
             userLeaveRoom(io, socket.id)
+        })
+
+        // Fetch More History
+        socket.on("moreHistory", async (endCursor: number) => {
+            await fetchMoreHistory(socket,endCursor)
         })
     })
 
@@ -73,7 +78,7 @@ async function userJoinRoom(
     userId: string,
     room: string,
 ) {
-    const { getChatHistoryByRoom, getAllChatHistory } = await useAsyncRedis()
+    const { getChatHistoryByRoom } = await useAsyncRedis()
     const user = userJoin(userId, room, socket.id)
     if (user) {
         socket.join(room)
@@ -91,10 +96,8 @@ async function userJoinRoom(
             room,
             users: getRoomUsers(room),
         })
-        const parsedHistory =
-            room === "Global"
-                ? await getAllChatHistory()
-                : await getChatHistoryByRoom(room)
+        const parsedHistory = await getChatHistoryByRoom(room)
+        console.log("parsedHistory=",parsedHistory.history)
         socket.emit("history", parsedHistory)
     }
 }
@@ -123,4 +126,15 @@ async function saveAndBroadcast(io: Server, message: string, socketId: string) {
         io.to(user.room).emit("message", chat)
         saveChatToHistory(chat)
     }
+}
+
+async function fetchMoreHistory(
+    socket: Socket,
+    endCursor: number,
+) {
+    const { getChatHistoryByRoom } = await useAsyncRedis()
+    const user = getUserBySocketId(socket.id)
+    if (!user?.room) return
+    const moreHistory = await getChatHistoryByRoom(user.room, endCursor)
+    socket.emit("history", moreHistory)
 }

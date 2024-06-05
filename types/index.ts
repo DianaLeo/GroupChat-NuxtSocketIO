@@ -15,3 +15,9 @@ export type Chat = {
     text: string
     sentTime: string
 }
+
+export type ChatHistory = {
+    history: Chat[]
+    hasNext: boolean
+    endCursor: number
+}

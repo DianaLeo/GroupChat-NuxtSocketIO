@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { type Socket } from "socket.io-client"
-import type { Chat, User } from "~/types"
+import type {Chat, ChatHistory, User} from "~/types"
 import { users as registeredUsers } from "../server/utils/users"
 
 const [chatModalOpen, toggleChatModal] = useToggle(false)
 
+let socket: Socket | null = null
 const username = ref("")
 const room = ref("EN")
 
@@ -12,10 +13,12 @@ const loggedIn = ref<boolean>(false)
 const userId = ref<string>()
 const errorMessage = ref<string>()
 
-let socket: Socket | null = null
 const unreadMessageCount = ref<number>(0)
 const chatList = ref<Chat[]>([])
+const isInitialized = ref<boolean>(false)
 const usersInRoom = ref<User[]>([])
+const endCursor = ref<number>(0)
+const canLoadMore = ref<boolean>(true)
 
 function login() {
   const user = registeredUsers.find((u) => u.username === username.value)
@@ -34,8 +37,8 @@ function logout() {
   loggedIn.value = false
   chatModalOpen.value = false
   if (socket?.connected) {
-    console.log("[chat.vue]: ws disconnected after logout")
-    socket?.disconnect()
+      console.log("[chat.vue]: ws disconnected after logout")
+      socket?.disconnect()
   }
 }
 
@@ -50,8 +53,13 @@ function establishSocketConnection() {
     console.log("[chat.vue]: ws connected")
   })
   socket.emit("userJoin", userId.value, room.value)
-  socket.on("history", (history: Chat[]) => {
-    chatList.value = history
+  socket.on("history", (history: ChatHistory) => {
+    isInitialized.value = true
+    chatList.value = [...chatList.value,...history.history]
+    endCursor.value = history.endCursor
+    if (!history.hasNext) {
+      canLoadMore.value = false
+    }
   })
   socket.on("roomUsers", (payload: { room: string; users: User[] }) => {
     if (room.value === payload.room) usersInRoom.value = payload.users
@@ -60,7 +68,8 @@ function establishSocketConnection() {
     if (newMessage.room === room.value) {
       if (newMessage.senderId !== userId.value && !chatModalOpen.value)
         ++unreadMessageCount.value
-      chatList.value.push(newMessage)
+      chatList.value.unshift(newMessage)
+      updateCursor()
     }
   })
 }
@@ -68,6 +77,8 @@ function establishSocketConnection() {
 function changeRoom(newRoom: string) {
   room.value = newRoom
   socket?.emit("changeRoom", userId.value, newRoom)
+  chatList.value = []
+  isInitialized.value = false
 }
 
 onBeforeUnmount(() => {
@@ -77,10 +88,18 @@ onBeforeUnmount(() => {
     socket?.disconnect()
   })
 })
+
+function fetchMoreHistory() {
+  socket?.emit("moreHistory", endCursor.value)
+}
+
+function updateCursor(){
+  endCursor.value = chatList.value.length - 1
+}
 </script>
 
 <template>
-  <PageContent>
+  <div class="h-screen">
     <!-- login-->
     <div v-if="!loggedIn">
       <p class="text-blue-gr">This is a fake login page.</p>
@@ -103,7 +122,7 @@ onBeforeUnmount(() => {
       </form>
     </div>
     <!-- chat room-->
-    <div v-else class="relative flex w-[400px] grow flex-col">
+    <div v-else class="relative flex w-[400px] h-full grow flex-col">
       <button
           class="absolute -left-32"
           title="Toggle chat modal"
@@ -120,15 +139,17 @@ onBeforeUnmount(() => {
       </button>
       <ChatRoom
           v-if="chatModalOpen"
-          class="max-h-[700px] grow"
+          class="max-h-full grow"
           :user-id="userId"
           :chat-list="chatList"
           :users="usersInRoom"
+          :can-load-more="canLoadMore"
+          :is-initialized="isInitialized"
           @logout="logout"
           @change-room="changeRoom"
+          @fetch-more-history="fetchMoreHistory"
+          @update-cursor="updateCursor"
       />
     </div>
-  </PageContent>
+  </div>
 </template>
-
-<style lang="scss" scoped></style>

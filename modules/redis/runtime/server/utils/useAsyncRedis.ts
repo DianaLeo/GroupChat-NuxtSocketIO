@@ -1,6 +1,6 @@
 import consola from "consola"
 import { createClient, type RedisClientType } from "redis"
-import type { Chat } from "~/types"
+import type { Chat,ChatHistory } from "~/types"
 import type { RedisConfig } from "../../../types"
 
 const CHAT_HISTORY_KEY = "chatHistory"
@@ -10,8 +10,11 @@ const logger = consola.withTag("redis")
 
 interface AsyncRedisResult {
     client: RedisClientType | null
-    getAllChatHistory: () => Promise<Chat[]>
-    getChatHistoryByRoom: (room: string) => Promise<Chat[]>
+    getChatHistoryByRoom: (
+        room: string,
+        endCursor?: number,
+        size?: number,
+    ) => Promise<ChatHistory>
     saveChatToHistory: (chat: Chat) => void
 }
 
@@ -47,6 +50,37 @@ async function getListByKey(key: string): Promise<string[]> {
     }
 }
 
+async function getListSegmentByKey(
+    key: string,
+    cursor: number = 0,
+    size: number = 20,
+): Promise<ChatHistory> {
+    if (!client || !isReady ) return {
+        history: [],
+        endCursor: 0,
+        hasNext: false,
+    }
+    const start = cursor
+    const end = start + size
+    try {
+        const rawData = (await client.lRange(key, start, end-1)) ?? []
+        const hasNext = rawData.length >= size
+        const endCursor = hasNext ? end : 0
+        return {
+            history: rawData.map((data) => JSON.parse(data)) as Chat[],
+            endCursor,
+            hasNext,
+        }
+    } catch (e) {
+        console.error("Redis get history error.", e)
+        return {
+            history: [],
+            endCursor: 0,
+            hasNext: false,
+        }
+    }
+}
+
 async function pushToListByKey(key: string, value: string, toEnd: "L" | "R") {
     try {
         client &&
@@ -59,23 +93,26 @@ async function pushToListByKey(key: string, value: string, toEnd: "L" | "R") {
     }
 }
 
+function formatRoomKey(room: string) {
+    return `${CHAT_HISTORY_KEY}-${room}`
+}
+
 async function useAsyncRedis(): Promise<AsyncRedisResult> {
     const runtimeConfig = useRuntimeConfig()
     client = client ?? (await initRedis(runtimeConfig.redis))
-    const getAllChatHistory = async (): Promise<Chat[]> => {
-        const chatHistory = await getListByKey(CHAT_HISTORY_KEY)
-        return chatHistory?.map((chat: string) => JSON.parse(chat)) ?? []
-    }
-    const getChatHistoryByRoom = async (room: string): Promise<Chat[]> => {
-        const parsedHistory = await getAllChatHistory()
-        return parsedHistory.filter((chat: Chat) => chat.room === room)
+
+    const getChatHistoryByRoom = async (
+        room: string,
+        endCursor?: number,
+        size?: number,
+    ): Promise<ChatHistory> => {
+        return await getListSegmentByKey(formatRoomKey(room), endCursor, size)
     }
     const saveChatToHistory = async (chat: Chat) => {
-        await pushToListByKey(CHAT_HISTORY_KEY, JSON.stringify(chat), "R")
+        await pushToListByKey(formatRoomKey(chat.room), JSON.stringify(chat), "L")
     }
     return {
         client,
-        getAllChatHistory,
         getChatHistoryByRoom,
         saveChatToHistory,
     }
