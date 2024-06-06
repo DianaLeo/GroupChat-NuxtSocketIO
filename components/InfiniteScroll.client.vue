@@ -3,47 +3,76 @@ import type { Chat } from "~/types"
 
 const props = withDefaults(
     defineProps<{
-      scrollList: Chat[] | null
+      scrollList: Chat[]
       canLoadMore: boolean
-      isInitialized: boolean
-      height?: number
+      ui?:{
+        height?: string
+      }
     }>(),
     {
-      scrollList: null,
-      height: 300,
+      ui: () => ({}),
     },
 )
 
 const emit = defineEmits<{
   (e: "fetchMore"): void
+  (e: "setChatModalAtBottomToTrue"): void
 }>()
 
-console.log("props.height=",props.height)
+const { scrollList } = toRefs(props)
 
-const scrollContainer = ref(null)
+const height = useTailwindMerged("h-[700px]", () => props.ui.height ?? "")
+
+const scrollContainer = ref<HTMLElement | null>(null)
 
 useInfiniteScroll(scrollContainer, loadMore, {
-  distance: props.height,
+  distance: 50,
   direction: "top",
   canLoadMore: () => props.canLoadMore,
 })
 
-onMounted(() => {
-  loadMore()
+useEventListener(scrollContainer, 'scroll', () => {
+  checkIfAtBottom()
+})
+
+onMounted(async () => {
+  await loadMore()
+  await nextTick()
+  checkIfAtBottom()
 })
 
 async function loadMore () {
-  if (props.isInitialized) {
     emit("fetchMore")
+}
+
+function checkIfAtBottom () {
+  const element = scrollContainer.value as HTMLElement
+  if (element?.scrollTop === 0) {
+    emit("setChatModalAtBottomToTrue")
   }
 }
+async function scrollToBottom(){
+  if (!scrollContainer.value) return
+  setTimeout(()=>{
+    scrollContainer.value?.scrollTo({
+      top: scrollContainer.value.scrollHeight,
+      behavior: "smooth",
+    })
+  },50)
+}
+
+defineExpose({
+  scrollToBottom,
+})
+
+console.log("canLoadMore=",props.canLoadMore)
 </script>
 
 <template>
   <div
       ref="scrollContainer"
       class="flex flex-col-reverse overflow-y-auto pb-4 hide-scrollbar space-y-2 bg-background-900"
-      :style="{height: `${height}px`}"
+      :class="[height]"
   >
       <slot name="renderer" :scroll-list="scrollList"></slot>
     <div v-if="!props.canLoadMore" class="text-center">No More History</div>

@@ -6,18 +6,20 @@
         defineProps<{
             userId: string
             chatList: Chat[]
+            room: string
             users?: User[]
             showUsers?: boolean
             showAdminMessage?: boolean
             availableRooms?: string[]
             canLoadMore: boolean
-            isInitialized: boolean
+            unreadMessageCount?: number
         }>(),
         {
             users: () => [],
             showUsers: true,
             showAdminMessage: true,
             availableRooms: () => ["Global", "EN", "ES", "PT", "PH", "JP"],
+            unreadMessageCount: 0,
         },
     )
 
@@ -26,20 +28,31 @@
         (e: "changeRoom", newRoom: string): void
       (e: "fetchMoreHistory"): void
       (e: "updateCursor"): void
+      (e: "resetUnreadMessageCount"): void
+      (e: "setChatModalAtBottomToTrue"): void
     }>()
 
     const currentUser = getUserByUserId(props.userId)
-    const currentRoom = ref(currentUser?.countryCode || props.availableRooms[1])
+    const currentRoom = ref(props.room)
     const message = ref("")
     const socket = useChatSocketClient()
+    const InfiniteScrollComponent = ref()
 
     async function sendMessage() {
         if (!message.value) return
         socket.emit("chatMessage", message.value)
         emit("updateCursor")
-        await nextTick(() => (message.value = ""))
-        scroll()
+        message.value = ""
     }
+
+    function scrollToBottom() {
+        InfiniteScrollComponent.value?.scrollToBottom()
+        emit("resetUnreadMessageCount")
+    }
+
+    defineExpose({
+        scrollToBottom
+    })
 </script>
 
 <template>
@@ -75,11 +88,27 @@
             </div>
         </div>
         <!-- main -->
-      <InfiniteScroll :scroll-list="chatList" :can-load-more="canLoadMore" :is-initialized="isInitialized" :height="700" @fetch-more="emit('fetchMoreHistory')">
-        <template #renderer="{scrollList}">
-          <ChatList :user-id="userId" :chat-list="scrollList"/>
-        </template>
-      </InfiniteScroll>
+        <InfiniteScroll
+            ref="InfiniteScrollComponent"
+            :scroll-list="chatList"
+            :can-load-more="canLoadMore"
+            :ui="{height:'h-[700px]'}"
+            @fetch-more="emit('fetchMoreHistory')"
+            @set-chat-modal-at-bottom-to-true="emit('setChatModalAtBottomToTrue')"
+        >
+          <template #renderer="{scrollList}">
+            <ChatList :user-id="userId" :chat-list="scrollList" :show-admin-message="showAdminMessage"/>
+          </template>
+        </InfiniteScroll>
+        <!-- unread message count-->
+        <div class="relative">
+          <div v-if="unreadMessageCount>0"
+               class="absolute left-1/2 -translate-x-1/2 bottom-[9px] w-10 h-7 bg-blue-gr text-center leading-7 mx-auto rounded-lg after:absolute after:-bottom-[8px] after:left-1/2 after:-translate-x-1/2 after:w-0 after:h-0 after:border-0 after:border-l-[10px] after:border-r-[10px] after:border-l-transparent after:border-r-transparent after:border-t-[10px] after:border-t-blue-gr"
+               @click="scrollToBottom"
+          >
+            {{unreadMessageCount}}
+          </div>
+        </div>
         <!--editing box-->
         <form class="flex space-x-4 bg-background-500 p-4" @submit.prevent="sendMessage">
             <input

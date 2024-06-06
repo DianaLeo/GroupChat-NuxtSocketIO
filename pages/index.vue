@@ -7,7 +7,7 @@ const [chatModalOpen, toggleChatModal] = useToggle(false)
 
 let socket: Socket | null = null
 const username = ref("")
-const room = ref("EN")
+const room = ref("Global")
 
 const loggedIn = ref<boolean>(false)
 const userId = ref<string>()
@@ -15,10 +15,12 @@ const errorMessage = ref<string>()
 
 const unreadMessageCount = ref<number>(0)
 const chatList = ref<Chat[]>([])
-const isInitialized = ref<boolean>(false)
 const usersInRoom = ref<User[]>([])
 const endCursor = ref<number>(0)
 const canLoadMore = ref<boolean>(true)
+const chatModalAtBottom = ref<boolean>(false)
+const chatRoomComponent = ref()
+const showAdminMessage = ref<boolean>(false)
 
 function login() {
   const user = registeredUsers.find((u) => u.username === username.value)
@@ -44,6 +46,10 @@ function logout() {
 
 function toggleBtnClickHandler() {
   toggleChatModal()
+  resetUnreadMessageCount()
+}
+
+function resetUnreadMessageCount(){
   unreadMessageCount.value = 0
 }
 
@@ -54,7 +60,6 @@ function establishSocketConnection() {
   })
   socket.emit("userJoin", userId.value, room.value)
   socket.on("history", (history: ChatHistory) => {
-    isInitialized.value = true
     chatList.value = [...chatList.value,...history.history]
     endCursor.value = history.endCursor
     if (!history.hasNext) {
@@ -66,9 +71,19 @@ function establishSocketConnection() {
   })
   socket.on("message", (newMessage: Chat) => {
     if (newMessage.room === room.value) {
-      if (newMessage.senderId !== userId.value && !chatModalOpen.value)
+      // If receiver chat modal is closed, or receiver scrollbar is not on the bottom, show unread message count
+      if (newMessage.senderId === "0"){
+        showAdminMessage.value && ++unreadMessageCount.value
+      }else if (
+          newMessage.senderId !== userId.value && !chatModalOpen.value ||
+          newMessage.senderId !== userId.value && !chatModalAtBottom.value
+      ) {
         ++unreadMessageCount.value
+      }
       chatList.value.unshift(newMessage)
+      // On sending a msg, sender should scroll to bottom, receivers should not
+      if (newMessage.senderId === userId.value) chatRoomComponent.value?.scrollToBottom()
+      // To avoid duplicate history being fetched
       updateCursor()
     }
   })
@@ -76,9 +91,9 @@ function establishSocketConnection() {
 
 function changeRoom(newRoom: string) {
   room.value = newRoom
-  socket?.emit("changeRoom", userId.value, newRoom)
   chatList.value = []
-  isInitialized.value = false
+  canLoadMore.value = true
+  socket?.emit("changeRoom", userId.value, newRoom)
 }
 
 onBeforeUnmount(() => {
@@ -95,6 +110,10 @@ function fetchMoreHistory() {
 
 function updateCursor(){
   endCursor.value = chatList.value.length - 1
+}
+
+function setChatModalAtBottomToTrue(){
+  chatModalAtBottom.value = true
 }
 </script>
 
@@ -131,24 +150,29 @@ function updateCursor(){
         <NuxtIcon name="message" class="text-3xl hover:text-neutral-50 md:text-4xl" />
         <!--notification-->
         <span
-            v-if="unreadMessageCount"
+            v-if="unreadMessageCount && !chatModalOpen"
             class="absolute -top-2 left-4 size-5 rounded-full bg-red-600 text-xs leading-5"
         >
                     {{ unreadMessageCount }}
                 </span>
       </button>
       <ChatRoom
+          ref="chatRoomComponent"
           v-if="chatModalOpen"
           class="max-h-full grow"
           :user-id="userId"
+          :room="room"
           :chat-list="chatList"
           :users="usersInRoom"
           :can-load-more="canLoadMore"
-          :is-initialized="isInitialized"
+          :unread-message-count="unreadMessageCount"
+          :show-admin-message="showAdminMessage"
           @logout="logout"
           @change-room="changeRoom"
           @fetch-more-history="fetchMoreHistory"
           @update-cursor="updateCursor"
+          @reset-unread-message-count="resetUnreadMessageCount"
+          @set-chat-modal-at-bottom-to-true="setChatModalAtBottomToTrue"
       />
     </div>
   </div>

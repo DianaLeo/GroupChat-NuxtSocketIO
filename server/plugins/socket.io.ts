@@ -97,7 +97,6 @@ async function userJoinRoom(
             users: getRoomUsers(room),
         })
         const parsedHistory = await getChatHistoryByRoom(room)
-        console.log("parsedHistory=",parsedHistory.history)
         socket.emit("history", parsedHistory)
     }
 }

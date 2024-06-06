@@ -25,12 +25,15 @@ withDefaults(
     >
         <!-- for admin-->
         <div
-            v-if="showAdminMessage && chat.senderId === '0'"
+            v-if="chat.senderId === '0'"
             title="Admin notifications can be turned off"
         >
-            <span class="text-primary-600 text-center text-xs">
+          <div v-if="showAdminMessage">
+             <span class="text-primary-600 text-center text-xs">
                 {{ chat.text }} at {{ chat.sentTime }}
             </span>
+          </div>
+
         </div>
         <!-- for normal users-->
         <div
