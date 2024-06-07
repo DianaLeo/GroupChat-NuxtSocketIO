@@ -53,7 +53,7 @@ async function getListByKey(key: string): Promise<string[]> {
 async function getListSegmentByKey(
     key: string,
     cursor: number = 0,
-    size: number = 20,
+    size: number = 15,
 ): Promise<ChatHistory> {
     if (!client || !isReady ) return {
         history: [],

@@ -1,120 +1,39 @@
 <script setup lang="ts">
-import { type Socket } from "socket.io-client"
-import type {Chat, ChatHistory, User} from "~/types"
-import { users as registeredUsers } from "../server/utils/users"
+import {useGroupChatStore} from "~/stores/groupChat"
+import {useLoginStore} from "~/stores/login";
 
+const groupChatStore = useGroupChatStore()
+const loginStore = useLoginStore()
 const [chatModalOpen, toggleChatModal] = useToggle(false)
 
-let socket: Socket | null = null
+const { unreadMessageCount } = storeToRefs(groupChatStore)
+const { loggedIn, countryCode, errorMessage } = storeToRefs(loginStore)
+
+
 const username = ref("")
-const room = ref("Global")
 
-const loggedIn = ref<boolean>(false)
-const userId = ref<string>()
-const errorMessage = ref<string>()
-
-const unreadMessageCount = ref<number>(0)
-const chatList = ref<Chat[]>([])
-const usersInRoom = ref<User[]>([])
-const endCursor = ref<number>(0)
-const canLoadMore = ref<boolean>(true)
-const chatModalAtBottom = ref<boolean>(false)
-const chatRoomComponent = ref()
-const showAdminMessage = ref<boolean>(false)
-
-function login() {
-  const user = registeredUsers.find((u) => u.username === username.value)
-  if (user) {
-    loggedIn.value = true
-    userId.value = user.userId
-    room.value = user.countryCode
+async function login() {
+  await loginStore.login(username.value)
+  if (loggedIn.value) {
     chatModalOpen.value = true
-    establishSocketConnection()
-  } else {
-    errorMessage.value = "User not found"
+    groupChatStore.setCurrentRoom(countryCode.value)
+    groupChatStore.establishSocketConnection(chatModalOpen.value)
   }
 }
 
-function logout() {
-  loggedIn.value = false
+async function logout() {
   chatModalOpen.value = false
-  if (socket?.connected) {
-      console.log("[chat.vue]: ws disconnected after logout")
-      socket?.disconnect()
-  }
+  await loginStore.logout()
 }
 
 function toggleBtnClickHandler() {
   toggleChatModal()
-  resetUnreadMessageCount()
-}
-
-function resetUnreadMessageCount(){
-  unreadMessageCount.value = 0
-}
-
-function establishSocketConnection() {
-  socket = useChatSocketClient()
-  socket.on("connect", () => {
-    console.log("[chat.vue]: ws connected")
-  })
-  socket.emit("userJoin", userId.value, room.value)
-  socket.on("history", (history: ChatHistory) => {
-    chatList.value = [...chatList.value,...history.history]
-    endCursor.value = history.endCursor
-    if (!history.hasNext) {
-      canLoadMore.value = false
-    }
-  })
-  socket.on("roomUsers", (payload: { room: string; users: User[] }) => {
-    if (room.value === payload.room) usersInRoom.value = payload.users
-  })
-  socket.on("message", (newMessage: Chat) => {
-    if (newMessage.room === room.value) {
-      // If receiver chat modal is closed, or receiver scrollbar is not on the bottom, show unread message count
-      if (newMessage.senderId === "0"){
-        showAdminMessage.value && ++unreadMessageCount.value
-      }else if (
-          newMessage.senderId !== userId.value && !chatModalOpen.value ||
-          newMessage.senderId !== userId.value && !chatModalAtBottom.value
-      ) {
-        ++unreadMessageCount.value
-      }
-      chatList.value.unshift(newMessage)
-      // On sending a msg, sender should scroll to bottom, receivers should not
-      if (newMessage.senderId === userId.value) chatRoomComponent.value?.scrollToBottom()
-      // To avoid duplicate history being fetched
-      updateCursor()
-    }
-  })
-}
-
-function changeRoom(newRoom: string) {
-  room.value = newRoom
-  chatList.value = []
-  canLoadMore.value = true
-  socket?.emit("changeRoom", userId.value, newRoom)
+  groupChatStore.resetUnreadMessageCount()
 }
 
 onBeforeUnmount(() => {
-  socket?.off("connect")
-  socket?.off("disconnect", () => {
-    console.log("[chat.vue]: ws disconnected before unmount")
-    socket?.disconnect()
-  })
+  groupChatStore.disconnectSocket()
 })
-
-function fetchMoreHistory() {
-  socket?.emit("moreHistory", endCursor.value)
-}
-
-function updateCursor(){
-  endCursor.value = chatList.value.length - 1
-}
-
-function setChatModalAtBottomToTrue(){
-  chatModalAtBottom.value = true
-}
 </script>
 
 <template>
@@ -157,22 +76,9 @@ function setChatModalAtBottomToTrue(){
                 </span>
       </button>
       <ChatRoom
-          ref="chatRoomComponent"
           v-if="chatModalOpen"
           class="max-h-full grow"
-          :user-id="userId"
-          :room="room"
-          :chat-list="chatList"
-          :users="usersInRoom"
-          :can-load-more="canLoadMore"
-          :unread-message-count="unreadMessageCount"
-          :show-admin-message="showAdminMessage"
           @logout="logout"
-          @change-room="changeRoom"
-          @fetch-more-history="fetchMoreHistory"
-          @update-cursor="updateCursor"
-          @reset-unread-message-count="resetUnreadMessageCount"
-          @set-chat-modal-at-bottom-to-true="setChatModalAtBottomToTrue"
       />
     </div>
   </div>

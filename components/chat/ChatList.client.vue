@@ -1,15 +1,14 @@
 <script setup lang="ts">
-import type {Chat} from "~/types"
 import { getUserByUserId } from "~/server/utils/users"
+import {useGroupChatStore} from "~/stores/groupChat"
+import {useLoginStore} from "~/stores/login";
 
-withDefaults(
-    defineProps<{
-      userId: string
-      chatList: Chat[]
-      showAdminMessage?: boolean
-    }>(),
-    {showAdminMessage: true},
-)
+const groupChatStore = useGroupChatStore()
+const loginStore = useLoginStore()
+
+const { chatList, showAdminMessage } = storeToRefs(groupChatStore)
+const { userId } = storeToRefs(loginStore)
+
 </script>
 
 <template>

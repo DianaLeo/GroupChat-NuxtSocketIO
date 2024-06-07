@@ -1,58 +1,39 @@
 <script setup lang="ts">
-    import type { Chat, User } from "~/types"
-    import { getUserByUserId } from "~/server/utils/users"
+    import {useGroupChatStore} from "~/stores/groupChat"
+    import {useLoginStore} from "~/stores/login";
 
-    const props = withDefaults(
+    const groupChatStore = useGroupChatStore()
+    const loginStore = useLoginStore()
+
+    const { currentRoom, usersInRoom, unreadMessageCount } = storeToRefs(groupChatStore)
+    const {username} = storeToRefs(loginStore)
+
+    withDefaults(
         defineProps<{
-            userId: string
-            chatList: Chat[]
-            room: string
-            users?: User[]
             showUsers?: boolean
-            showAdminMessage?: boolean
             availableRooms?: string[]
-            canLoadMore: boolean
-            unreadMessageCount?: number
         }>(),
         {
-            users: () => [],
             showUsers: true,
-            showAdminMessage: true,
             availableRooms: () => ["Global", "EN", "ES", "PT", "PH", "JP"],
-            unreadMessageCount: 0,
         },
     )
 
     const emit = defineEmits<{
         (e: "logout"): void
-        (e: "changeRoom", newRoom: string): void
-      (e: "fetchMoreHistory"): void
-      (e: "updateCursor"): void
-      (e: "resetUnreadMessageCount"): void
-      (e: "setChatModalAtBottomToTrue"): void
     }>()
 
-    const currentUser = getUserByUserId(props.userId)
-    const currentRoom = ref(props.room)
+    const room = ref(currentRoom.value)
     const message = ref("")
-    const socket = useChatSocketClient()
     const InfiniteScrollComponent = ref()
 
     async function sendMessage() {
         if (!message.value) return
-        socket.emit("chatMessage", message.value)
-        emit("updateCursor")
+        groupChatStore.sendMessage(message.value)
+        groupChatStore.updateCursor()
+        await nextTick()
         message.value = ""
     }
-
-    function scrollToBottom() {
-        InfiniteScrollComponent.value?.scrollToBottom()
-        emit("resetUnreadMessageCount")
-    }
-
-    defineExpose({
-        scrollToBottom
-    })
 </script>
 
 <template>
@@ -60,12 +41,12 @@
         <!-- header-->
         <div class="my-4 flex w-[400px] justify-between">
             <div class="flex items-center space-x-3">
-                <h2>{{ currentUser?.username }} in</h2>
+                <h2>{{ username }} in</h2>
                 <select
-                    v-model="currentRoom"
+                    v-model="room"
                     class="bg-primary-800 text-primary-50 h-fit w-28 rounded-lg px-2 py-1"
                     title="Currently global room get chat histories of all the other rooms. Requirements to be specified."
-                    @change="emit('changeRoom', currentRoom)"
+                    @change="groupChatStore.changeRoom(room)"
                 >
                     <option v-for="r in availableRooms" :key="r" :value="r">{{ r }}</option>
                 </select>
@@ -79,7 +60,7 @@
             title="All-users-in-a-room. This section can be turned off"
         >
             <div
-                v-for="(u, index) in users"
+                v-for="(u, index) in usersInRoom"
                 :key="index"
                 class="size-9 rounded-full text-center leading-9"
                 :style="{ backgroundColor: u.avatar }"
@@ -90,21 +71,17 @@
         <!-- main -->
         <InfiniteScroll
             ref="InfiniteScrollComponent"
-            :scroll-list="chatList"
-            :can-load-more="canLoadMore"
             :ui="{height:'h-[700px]'}"
-            @fetch-more="emit('fetchMoreHistory')"
-            @set-chat-modal-at-bottom-to-true="emit('setChatModalAtBottomToTrue')"
         >
-          <template #renderer="{scrollList}">
-            <ChatList :user-id="userId" :chat-list="scrollList" :show-admin-message="showAdminMessage"/>
+          <template #renderer>
+            <ChatList/>
           </template>
         </InfiniteScroll>
         <!-- unread message count-->
         <div class="relative">
           <div v-if="unreadMessageCount>0"
                class="absolute left-1/2 -translate-x-1/2 bottom-[9px] w-10 h-7 bg-blue-gr text-center leading-7 mx-auto rounded-lg after:absolute after:-bottom-[8px] after:left-1/2 after:-translate-x-1/2 after:w-0 after:h-0 after:border-0 after:border-l-[10px] after:border-r-[10px] after:border-l-transparent after:border-r-transparent after:border-t-[10px] after:border-t-blue-gr"
-               @click="scrollToBottom"
+               @click="groupChatStore.setShouldScrollToBottom(true)"
           >
             {{unreadMessageCount}}
           </div>

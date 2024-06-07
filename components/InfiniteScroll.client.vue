@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import type { Chat } from "~/types"
+import {useGroupChatStore} from "~/stores/groupChat"
+
+const groupChatStore = useGroupChatStore()
+const {canLoadMore: canLoadMoreHistory, isScrollAtBottom, shouldScrollToBottom} = storeToRefs(groupChatStore)
 
 const props = withDefaults(
     defineProps<{
-      scrollList: Chat[]
-      canLoadMore: boolean
       ui?:{
         height?: string
       }
@@ -14,21 +15,13 @@ const props = withDefaults(
     },
 )
 
-const emit = defineEmits<{
-  (e: "fetchMore"): void
-  (e: "setChatModalAtBottomToTrue"): void
-}>()
-
-const { scrollList } = toRefs(props)
-
 const height = useTailwindMerged("h-[700px]", () => props.ui.height ?? "")
 
 const scrollContainer = ref<HTMLElement | null>(null)
 
 useInfiniteScroll(scrollContainer, loadMore, {
-  distance: 50,
   direction: "top",
-  canLoadMore: () => props.canLoadMore,
+  canLoadMore: () => canLoadMoreHistory.value,
 })
 
 useEventListener(scrollContainer, 'scroll', () => {
@@ -36,22 +29,25 @@ useEventListener(scrollContainer, 'scroll', () => {
 })
 
 onMounted(async () => {
-  await loadMore()
-  await nextTick()
   checkIfAtBottom()
 })
 
 async function loadMore () {
-    emit("fetchMore")
+    groupChatStore.fetchMoreHistory()
 }
 
 function checkIfAtBottom () {
-  const element = scrollContainer.value as HTMLElement
-  if (element?.scrollTop === 0) {
-    emit("setChatModalAtBottomToTrue")
+  if (scrollContainer.value){
+    if (scrollContainer.value.scrollTop > -30){
+      groupChatStore.setIsScrollAtBottom(true)
+    }else{
+      groupChatStore.setIsScrollAtBottom(false)
+    }
   }
 }
+
 async function scrollToBottom(){
+  console.log("scrollToBottom called")
   if (!scrollContainer.value) return
   setTimeout(()=>{
     scrollContainer.value?.scrollTo({
@@ -61,11 +57,9 @@ async function scrollToBottom(){
   },50)
 }
 
-defineExpose({
-  scrollToBottom,
+watchEffect(()=>{
+  shouldScrollToBottom.value && scrollToBottom()
 })
-
-console.log("canLoadMore=",props.canLoadMore)
 </script>
 
 <template>
@@ -74,8 +68,8 @@ console.log("canLoadMore=",props.canLoadMore)
       class="flex flex-col-reverse overflow-y-auto pb-4 hide-scrollbar space-y-2 bg-background-900"
       :class="[height]"
   >
-      <slot name="renderer" :scroll-list="scrollList"></slot>
-    <div v-if="!props.canLoadMore" class="text-center">No More History</div>
+      <slot name="renderer" ></slot>
+    <div v-if="!canLoadMoreHistory" class="text-center">No More History</div>
   </div>
 </template>
 
