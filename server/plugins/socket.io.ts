@@ -14,7 +14,7 @@ import {
 
 export default defineNitroPlugin((nitroApp: NitroApp) => {
     const engine = new Engine()
-    const io = new Server()
+    const io = new Server({connectionStateRecovery:{maxDisconnectionDuration:1000}})
     io.bind(engine)
 
     io.on("connection", (socket) => {

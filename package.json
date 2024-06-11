@@ -28,5 +28,6 @@
   },
   "devDependencies": {
     "sass": "^1.77.4"
-  }
+  },
+  "packageManager": "^bun@1.0.33"
 }

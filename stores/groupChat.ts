@@ -8,7 +8,7 @@ export const useGroupChatStore = defineStore('groupChat', () => {
     const chatList = ref<Chat[]>([])
     const currentRoom = ref<string>('Global')
     const usersInRoom = ref<User[]>([])
-    const historyCursor = ref<number | null>(null)
+    const historyCursor = ref<number>(0)
     const unreadMessageCount = ref<number>(0)
     const isScrollAtBottom = ref<boolean>(true)
     const canLoadMore = ref<boolean>(true)
@@ -109,10 +109,23 @@ export const useGroupChatStore = defineStore('groupChat', () => {
         socket.value?.emit('chatMessage', message)
     }
 
+    const resetStates = () => {
+        chatList.value = []
+        currentRoom.value = ""
+        usersInRoom.value = []
+        historyCursor.value = 0
+        unreadMessageCount.value = 0
+        isScrollAtBottom.value = false
+        canLoadMore.value = true
+        showAdminMessage.value = false
+        shouldScrollToBottom.value = false
+    }
+
     const disconnectSocket = () => {
         if (socket.value?.connected) {
             console.log('[chat.vue]: ws disconnected')
             cleanUpClient()
+            resetStates()
         }
     }
 

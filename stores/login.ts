@@ -25,9 +25,21 @@ export const useLoginStore = defineStore('login', () => {
         }
     }
 
+    const resetStates = () => {
+        userId.value = ""
+        username.value = ""
+        countryCode.value = ""
+        online.value = false
+        room.value = ""
+        avatar.value = ""
+        loggedIn.value = false
+        errorMessage.value = ""
+    }
+
     const logout = async () => {
         loggedIn.value = false
         useGroupChatStore().disconnectSocket()
+        resetStates()
     }
 
     return {
