@@ -1,4 +1,5 @@
-import type { User } from "~/types"
+import { type User } from "~/types"
+
 export const users: User[] = [
     {
         userId: "0",
@@ -8,6 +9,7 @@ export const users: User[] = [
         online: false,
         room: undefined,
         avatar: "#e74c3c",
+        lastActiveTime: undefined,
     },
     {
         userId: "1",
@@ -17,6 +19,7 @@ export const users: User[] = [
         online: false,
         room: undefined,
         avatar: "#e74c3c",
+        lastActiveTime: undefined,
     },
     {
         userId: "2",
@@ -26,6 +29,7 @@ export const users: User[] = [
         online: false,
         room: undefined,
         avatar: "#8e44ad",
+        lastActiveTime: undefined,
     },
     {
         userId: "3",
@@ -35,6 +39,7 @@ export const users: User[] = [
         online: false,
         room: undefined,
         avatar: "#3498db",
+        lastActiveTime: undefined,
     },
     {
         userId: "4",
@@ -43,6 +48,7 @@ export const users: User[] = [
         online: false,
         countryCode: "ES",
         avatar: "#e67e22",
+        lastActiveTime: undefined,
     },
     {
         userId: "5",
@@ -52,6 +58,7 @@ export const users: User[] = [
         online: false,
         room: undefined,
         avatar: "#2ecc71",
+        lastActiveTime: undefined,
     },
 ]
 
@@ -64,6 +71,7 @@ export function userJoin(
     if (user) {
         user.room = room
         user.socketId = socketId
+        user.lastActiveTime = Date.now()
         return user
     }
     return undefined
@@ -82,9 +90,22 @@ export function userLeave(socketId: string) {
     if (user) {
         user.room = undefined
         user.socketId = undefined
+        user.lastActiveTime = undefined
     }
 }
 
 export function getRoomUsers(room: string) {
     return users.filter((user) => user.room === room)
+}
+
+export function getOnlineUsers() {
+    return users.filter(
+        (user) => user.room && user.socketId && user.lastActiveTime,
+    )
+}
+
+export function updateUserLastActiveTime(socketId: string) {
+    const user = getUserBySocketId(socketId)
+    if (!user) return
+    user.lastActiveTime = Date.now()
 }

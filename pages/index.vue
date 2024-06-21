@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import {useGroupChatStore} from "~/stores/groupChat"
-import {useLoginStore} from "~/stores/login";
+import { useGroupChatStore } from "~/stores/groupChat"
+import { useLoginStore } from "~/stores/login"
 
 const groupChatStore = useGroupChatStore()
+const gameStore = useGameStore()
 const loginStore = useLoginStore()
 const [chatModalOpen, toggleChatModal] = useToggle(false)
 
 const { unreadMessageCount } = storeToRefs(groupChatStore)
 const { loggedIn, countryCode, errorMessage } = storeToRefs(loginStore)
-
 
 const username = ref("")
 
@@ -17,7 +17,8 @@ async function login() {
   if (loggedIn.value) {
     chatModalOpen.value = true
     groupChatStore.setCurrentRoom(countryCode.value)
-    groupChatStore.establishSocketConnection(chatModalOpen.value)
+    await groupChatStore.establishSocketConnection(chatModalOpen.value)
+    gameStore.establishSocketConnection()
   }
 }
 
@@ -37,9 +38,9 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="h-screen">
-    <!-- login-->
-    <div v-if="!loggedIn">
+  <div class="absolute h-full w-full">
+    <!--         login-->
+    <div v-if="!loggedIn" class="mx-auto w-[400px]">
       <p class="text-blue-gr">This is a fake login page.</p>
       <p class="text-blue-gr">Registered users are VJ, Ryan, Ryo, Tianyi and Diana.</p>
       <form class="my-6 flex flex-col space-y-4" @submit.prevent="login">
@@ -60,7 +61,7 @@ onBeforeUnmount(() => {
       </form>
     </div>
     <!-- chat room-->
-    <div v-else class="relative flex w-[400px] h-full grow flex-col">
+    <div v-if="loggedIn" class="fixed right-0 h-full w-[400px]">
       <button
           class="absolute -left-32"
           title="Toggle chat modal"
@@ -75,11 +76,8 @@ onBeforeUnmount(() => {
                     {{ unreadMessageCount }}
                 </span>
       </button>
-      <ChatRoom
-          v-if="chatModalOpen"
-          class="max-h-full grow"
-          @logout="logout"
-      />
+      <ChatRoom v-if="chatModalOpen" class="h-full" @logout="logout" />
     </div>
+    <GameView v-if="loggedIn" />
   </div>
 </template>

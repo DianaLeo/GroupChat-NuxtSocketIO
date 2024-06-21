@@ -17,6 +17,7 @@
     "moment": "^2.30.1",
     "nuxt": "^3.11.2",
     "nuxt-icons": "^3.2.1",
+    "nuxt-plotly": "^1.0.14",
     "pinia": "^2.1.7",
     "prettier": "^3.3.0",
     "redis": "^4.6.14",
@@ -28,6 +29,5 @@
   },
   "devDependencies": {
     "sass": "^1.77.4"
-  },
-  "packageManager": "^bun@1.0.33"
+  }
 }

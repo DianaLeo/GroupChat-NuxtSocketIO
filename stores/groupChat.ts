@@ -1,14 +1,15 @@
-import type { Chat, ChatHistory, User } from '~/types'
-import type {Socket} from "socket.io-client";
+import type { Chat, ChatHistory, User } from "~/types"
+import type { Socket } from "socket.io-client"
 
-const {createClient,cleanUpClient} = useGroupChatSocketClient()
+const CHAT_SOCKET_PATH = "/chat-socket/"
+const { createClient, cleanUpClient } = useSocketClient(CHAT_SOCKET_PATH)
 const socket = ref<Socket | null>(null)
 
-export const useGroupChatStore = defineStore('groupChat', () => {
+export const useGroupChatStore = defineStore("groupChat", () => {
     const chatList = ref<Chat[]>([])
-    const currentRoom = ref<string>('Global')
+    const currentRoom = ref<string>("Global")
     const usersInRoom = ref<User[]>([])
-    const historyCursor = ref<number>(0)
+    const historyCursor = ref<number | null>(null)
     const unreadMessageCount = ref<number>(0)
     const isScrollAtBottom = ref<boolean>(true)
     const canLoadMore = ref<boolean>(true)
@@ -24,7 +25,8 @@ export const useGroupChatStore = defineStore('groupChat', () => {
         chatList.value = []
         setCanLoadMore(true)
         const userId = useLoginStore().userId
-        socket.value?.emit('changeRoom', userId, newRoom)
+        socket.value?.emit("changeRoom", userId, newRoom)
+        resetUnreadMessageCount()
     }
 
     const updateCursor = () => {
@@ -60,53 +62,75 @@ export const useGroupChatStore = defineStore('groupChat', () => {
         const userId = useLoginStore().userId
 
         socket.value = createClient()
-        console.log("socket=",socket)
-            socket.value?.on('connect', () => {
-                console.log('[chat.vue]: ws connected')
-            })
 
-            socket.value?.emit('userJoin', userId, currentRoom.value)
+        socket.value?.on("connect", () => {
+            console.log("ws connected")
+        })
 
-            socket.value?.on('history', (history: ChatHistory) => {
-                chatList.value = [...chatList.value, ...history.history]
-                historyCursor.value = history.endCursor
-                if (!history.hasNext) {
-                    setCanLoadMore(false)
-                }
-            })
+        socket.value?.emit("userJoin", userId, currentRoom.value)
 
-            socket.value?.on('roomUsers', (payload: { room: string; users: User[] }) => {
-                if (currentRoom.value === payload.room) usersInRoom.value = payload.users
-            })
+        socket.value?.on("history", (history: ChatHistory) => {
+            chatList.value = [...chatList.value, ...history.history]
+            historyCursor.value = history.endCursor
+            setCanLoadMore(true)
+            if (!history.hasNext) {
+                setCanLoadMore(false)
+            }
+        })
 
-            socket.value?.on('message', (newMessage: Chat) => {
-                if (newMessage.room === currentRoom.value) {
-                    if (newMessage.senderId === userId) {
-                        setShouldScrollToBottom(true)
-                        chatList.value.unshift(newMessage)
-                    } else {
-                        setShouldScrollToBottom(false)
-                        if ((newMessage.senderId !== '0' || showAdminMessage.value) &&
-                            (!isChatModalOpen || !isScrollAtBottom.value)) {
-                            console.log(isScrollAtBottom)
-                            incrementUnreadMessageCount()
-                        }
-                        if (newMessage.senderId !== '0' || showAdminMessage.value) {
-                            chatList.value.unshift(newMessage)
-                        }
+        socket.value?.on(
+            "roomUsers",
+            (payload: { room: string; users: User[] }) => {
+                if (currentRoom.value === payload.room)
+                    usersInRoom.value = payload.users
+            },
+        )
+
+        socket.value?.on("message", (newMessage: Chat) => {
+            if (newMessage.room === currentRoom.value) {
+                if (newMessage.senderId === userId) {
+                    setShouldScrollToBottom(true)
+                    chatList.value.unshift(newMessage)
+                } else {
+                    setShouldScrollToBottom(false)
+                    if (
+                        (newMessage.senderId !== "0" ||
+                            showAdminMessage.value) &&
+                        (!isChatModalOpen || !isScrollAtBottom.value)
+                    ) {
+                        console.log(isScrollAtBottom)
+                        incrementUnreadMessageCount()
                     }
-                    updateCursor()
+                    if (newMessage.senderId !== "0" || showAdminMessage.value) {
+                        chatList.value.unshift(newMessage)
+                    }
                 }
-            })
+                updateCursor()
+            }
+        })
+
+        // response to user active check
+        socket.value?.on("ping", () => {
+            socket.value?.emit("pong")
+        })
+
+        socket.value?.on("disconnect", () => {
+            console.log("ws disconnected")
+        })
+
+        socket.value?.on("connect_error", (err) => {
+            console.log("ws connection error = ", err)
+        })
     }
 
     const fetchMoreHistory = () => {
-        if (historyCursor.value) socket.value?.emit('moreHistory', historyCursor.value)
+        if (historyCursor.value)
+            socket.value?.emit("moreHistory", historyCursor.value)
     }
 
     const sendMessage = (message: string) => {
         setShouldScrollToBottom(false)
-        socket.value?.emit('chatMessage', message)
+        socket.value?.emit("chatMessage", message)
     }
 
     const resetStates = () => {
@@ -123,8 +147,7 @@ export const useGroupChatStore = defineStore('groupChat', () => {
 
     const disconnectSocket = () => {
         if (socket.value?.connected) {
-            console.log('[chat.vue]: ws disconnected')
-            cleanUpClient()
+            socket.value = cleanUpClient()
             resetStates()
         }
     }

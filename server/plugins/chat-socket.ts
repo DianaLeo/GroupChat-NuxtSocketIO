@@ -1,20 +1,24 @@
 import type { NitroApp } from "nitropack"
 import { Server as Engine } from "engine.io"
 import { Server, type Socket } from "socket.io"
-import { defineEventHandler } from "h3"
-import { defineNitroPlugin } from "nitropack/dist/runtime/plugin"
 import type { Chat } from "~/types"
-import moment from "moment/moment"
 import {
+    getOnlineUsers,
     getRoomUsers,
     getUserBySocketId,
     userJoin,
     userLeave,
+    updateUserLastActiveTime,
 } from "../utils/users"
+
+const CHAT_SOCKET_PATH = "/chat-socket/"
+const INACTIVITY_LIMIT = 30000 // 30 seconds
+const CHECK_INTERVAL = 10000 // 10 seconds
+const PING_INTERVAL = 3000 // 3 seconds
 
 export default defineNitroPlugin((nitroApp: NitroApp) => {
     const engine = new Engine()
-    const io = new Server({connectionStateRecovery:{maxDisconnectionDuration:1000}})
+    const io = new Server()
     io.bind(engine)
 
     io.on("connection", (socket) => {
@@ -41,18 +45,41 @@ export default defineNitroPlugin((nitroApp: NitroApp) => {
 
         //DISCONNECT
         socket.on("disconnect", () => {
-            console.info("[Server/Plugin]: Group chat web socket disconnected",socket.id)
+            console.info(
+                "[Server/Plugin]: Group chat web socket disconnected",
+                socket.id,
+            )
             userLeaveRoom(io, socket.id)
         })
 
         // Fetch More History
         socket.on("moreHistory", async (endCursor: number) => {
-            await fetchMoreHistory(socket,endCursor)
+            await fetchMoreHistory(socket, endCursor)
+        })
+
+        // Update last active time
+        socket.on("pong", () => {
+            updateUserLastActiveTime(socket.id)
         })
     })
 
+    io.on("disconnect", () => {
+        console.info("[Server/Plugin]: Group chat web socket disconnected")
+    })
+
+    io.engine.on("connection_error", (err) => {
+        console.log(
+            "[Server/Plugin]: Group chat web socket connection error",
+            err.message,
+        )
+    })
+
+    // check active users
+    setInterval(() => sendPingMessages(io), PING_INTERVAL)
+    // setInterval(() => checkAndKillInactiveSockets(io), CHECK_INTERVAL)
+
     nitroApp.router.use(
-        "/socket.io/",
+        CHAT_SOCKET_PATH,
         defineEventHandler({
             handler(event) {
                 engine.handleRequest(event.node.req, event.node.res)
@@ -63,12 +90,26 @@ export default defineNitroPlugin((nitroApp: NitroApp) => {
 })
 
 function formatMessage(senderId: string, text: string, room: string): Chat {
+    const now = new Date()
+    const day = String(now.getDate()).padStart(2, "0")
+    const month = String(now.getMonth() + 1).padStart(2, "0")
+    const year = String(now.getFullYear()).slice(-2)
+    let hours = now.getHours()
+    const minutes = String(now.getMinutes()).padStart(2, "0")
+    const ampm = hours >= 12 ? "pm" : "am"
+
+    // Convert hours to 12-hour format
+    hours = hours % 12
+    hours = hours ? hours : 12
+    // Combine the date and time parts into the final string
+    const formattedDateTime = `${day}/${month}/${year} ${hours}:${minutes} ${ampm}`
+
     return {
         id: "0",
         room,
         senderId: senderId,
         text,
-        sentTime: moment().format("DD/MM/YY hh:mm a"),
+        sentTime: formattedDateTime,
     }
 }
 
@@ -96,7 +137,7 @@ async function userJoinRoom(
             room,
             users: getRoomUsers(room),
         })
-        const parsedHistory = await getChatHistoryByRoom(room)
+        const parsedHistory = await getChatHistoryByRoom(room, 0)
         socket.emit("history", parsedHistory)
     }
 }
@@ -127,13 +168,33 @@ async function saveAndBroadcast(io: Server, message: string, socketId: string) {
     }
 }
 
-async function fetchMoreHistory(
-    socket: Socket,
-    endCursor: number,
-) {
+async function fetchMoreHistory(socket: Socket, endCursor: number) {
     const { getChatHistoryByRoom } = await useAsyncRedis()
     const user = getUserBySocketId(socket.id)
     if (!user?.room) return
     const moreHistory = await getChatHistoryByRoom(user.room, endCursor)
     socket.emit("history", moreHistory)
+}
+
+function checkAndKillInactiveSockets(io: Server) {
+    console.log("Checking inactive sockets...")
+    const now = Date.now()
+    const timeout = INACTIVITY_LIMIT
+    const onlineUsers = getOnlineUsers()
+
+    onlineUsers.forEach((user) => {
+        if (!user.lastActiveTime || !user.socketId) return
+        if (now - user.lastActiveTime > timeout) {
+            const socket = io.sockets.sockets.get(user.socketId)
+            if (socket) {
+                console.log(`Killing inactive socket: ${socket.id}`)
+                userLeaveRoom(io, socket.id)
+                socket.disconnect(true)
+            }
+        }
+    })
+}
+
+function sendPingMessages(io: Server) {
+    io.emit("ping")
 }

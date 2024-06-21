@@ -1,15 +1,15 @@
-import { users as registeredUsers } from '~/server/utils/users'
+import { users as registeredUsers } from "~/server/utils/users"
 
-export const useLoginStore = defineStore('login', () => {
-    const userId = ref('')
+export const useLoginStore = defineStore("login", () => {
+    const userId = ref("")
     const socketId = ref<string | null>(null)
-    const username = ref('')
-    const countryCode = ref('')
+    const username = ref("")
+    const countryCode = ref("")
     const online = ref(false)
-    const room = ref('')
-    const avatar = ref('')
+    const room = ref("")
+    const avatar = ref("")
     const loggedIn = ref(false)
-    const errorMessage = ref('')
+    const errorMessage = ref("")
 
     const login = async (usernameInput: string) => {
         const user = registeredUsers.find((u) => u.username === usernameInput)
@@ -19,9 +19,9 @@ export const useLoginStore = defineStore('login', () => {
             username.value = user.username
             countryCode.value = user.countryCode
             avatar.value = user.avatar
-            errorMessage.value = ''
+            errorMessage.value = ""
         } else {
-            errorMessage.value = 'User not found'
+            errorMessage.value = "User not found"
         }
     }
 
@@ -39,6 +39,7 @@ export const useLoginStore = defineStore('login', () => {
     const logout = async () => {
         loggedIn.value = false
         useGroupChatStore().disconnectSocket()
+        useGameStore().disconnectSocket()
         resetStates()
     }
 

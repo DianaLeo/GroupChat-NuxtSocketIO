@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import {useGroupChatStore} from "~/stores/groupChat"
+import { useGroupChatStore } from "~/stores/groupChat"
 
 const groupChatStore = useGroupChatStore()
-const {canLoadMore: canLoadMoreHistory, isScrollAtBottom, shouldScrollToBottom} = storeToRefs(groupChatStore)
+const { canLoadMore: canLoadMoreHistory, shouldScrollToBottom } = storeToRefs(groupChatStore)
 
 const props = withDefaults(
     defineProps<{
-      ui?:{
+      ui?: {
         height?: string
       }
     }>(),
@@ -24,7 +24,7 @@ useInfiniteScroll(scrollContainer, loadMore, {
   canLoadMore: () => canLoadMoreHistory.value,
 })
 
-useEventListener(scrollContainer, 'scroll', () => {
+useEventListener(scrollContainer, "scroll", () => {
   checkIfAtBottom()
 })
 
@@ -32,32 +32,32 @@ onMounted(async () => {
   checkIfAtBottom()
 })
 
-async function loadMore () {
-    groupChatStore.fetchMoreHistory()
+async function loadMore() {
+  groupChatStore.setCanLoadMore(false)
+  groupChatStore.fetchMoreHistory()
 }
 
-function checkIfAtBottom () {
-  if (scrollContainer.value){
-    if (scrollContainer.value.scrollTop > -30){
+function checkIfAtBottom() {
+  if (scrollContainer.value) {
+    if (scrollContainer.value.scrollTop > -30) {
       groupChatStore.setIsScrollAtBottom(true)
-    }else{
+    } else {
       groupChatStore.setIsScrollAtBottom(false)
     }
   }
 }
 
-async function scrollToBottom(){
-  console.log("scrollToBottom called")
+async function scrollToBottom() {
   if (!scrollContainer.value) return
-  setTimeout(()=>{
+  setTimeout(() => {
     scrollContainer.value?.scrollTo({
       top: scrollContainer.value.scrollHeight,
       behavior: "smooth",
     })
-  },50)
+  }, 50)
 }
 
-watchEffect(()=>{
+watchEffect(() => {
   shouldScrollToBottom.value && scrollToBottom()
 })
 </script>
@@ -65,22 +65,22 @@ watchEffect(()=>{
 <template>
   <div
       ref="scrollContainer"
-      class="flex flex-col-reverse overflow-y-auto pb-4 hide-scrollbar space-y-2 bg-background-900"
+      class="hide-scrollbar flex flex-col-reverse space-y-2 overflow-y-auto bg-background-900 pb-4"
       :class="[height]"
   >
-      <slot name="renderer" ></slot>
+    <slot name="renderer"></slot>
     <div v-if="!canLoadMoreHistory" class="text-center">No More History</div>
   </div>
 </template>
 
 <style lang="scss" scoped>
-  /* Hide scrollbar for Chrome, Safari and Opera */
-  .hide-scrollbar::-webkit-scrollbar {
-    display: none;
-  }
-  /* Hide scrollbar for IE, Edge and Firefox */
-  .hide-scrollbar {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
+/* Hide scrollbar for Chrome, Safari and Opera */
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+/* Hide scrollbar for IE, Edge and Firefox */
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
 </style>

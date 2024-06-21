@@ -6,6 +6,7 @@ export type User = {
     online?: boolean
     room?: string
     avatar: string
+    lastActiveTime: number | undefined
 }
 
 export type Chat = {
@@ -20,4 +21,10 @@ export type ChatHistory = {
     history: Chat[]
     hasNext: boolean
     endCursor: number
+}
+
+export type ResultPerRound = {
+    userId: string
+    cashOutX: number
+    multiplier: number
 }
